@@ -1,4 +1,4 @@
-package s7project.chatservice;
+package s7project;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
