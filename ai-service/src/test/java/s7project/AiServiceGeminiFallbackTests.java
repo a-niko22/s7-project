@@ -43,7 +43,7 @@ class AiServiceGeminiFallbackTests {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.title").value("Action Points"))
+                .andExpect(jsonPath("$.title").value("[AI-SERVICE MOCK] Action Points"))
                 .andExpect(jsonPath("$.bullets[0]").exists());
     }
 }

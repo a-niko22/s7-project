@@ -38,14 +38,32 @@ public class AiInsightService {
     }
 
     private AiInsightResponse generate(AiInsightType type, AiRequest request) {
+        LOGGER.info(
+                "AI request received. provider={}, type={}, channelId={}, channelName={}, messages={}",
+                aiProvider,
+                type.displayName(),
+                request.channelId(),
+                request.channelName(),
+                request.messages() == null ? 0 : request.messages().size()
+        );
+
         if ("gemini".equalsIgnoreCase(aiProvider)) {
             try {
-                return geminiClient.generate(type, request);
+                AiInsightResponse geminiResponse = geminiClient.generate(type, request);
+                LOGGER.info("Gemini succeeded for {} on channel {}", type.displayName(), request.channelId());
+                return geminiResponse;
             } catch (Exception exception) {
-                LOGGER.warn("Gemini request failed for {}. Falling back to mock output.", type.displayName(), exception);
+                LOGGER.warn(
+                        "Gemini request failed for {} on channel {}. Falling back to mock output. reason={}",
+                        type.displayName(),
+                        request.channelId(),
+                        exception.getMessage(),
+                        exception
+                );
             }
         }
 
+        LOGGER.info("Using ai-service mock output for {} on channel {}", type.displayName(), request.channelId());
         return mockInsightGenerator.generate(type, request);
     }
 }

@@ -33,9 +33,9 @@ class AiServiceApplicationTests {
     void returnsMockSummary() throws Exception {
         mockMvc.perform(post("/api/ai/summary")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody()))
+                .content(requestBody()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.title").value("Summary"))
+                .andExpect(jsonPath("$.title").value("[AI-SERVICE MOCK] Summary"))
                 .andExpect(jsonPath("$.bullets[0]").exists())
                 .andExpect(jsonPath("$.footer").exists());
     }
@@ -44,9 +44,9 @@ class AiServiceApplicationTests {
     void returnsMockDecisions() throws Exception {
         mockMvc.perform(post("/api/ai/decisions")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody()))
+                .content(requestBody()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.title").value("Decisions"))
+                .andExpect(jsonPath("$.title").value("[AI-SERVICE MOCK] Decisions"))
                 .andExpect(jsonPath("$.bullets[1]").exists());
     }
 

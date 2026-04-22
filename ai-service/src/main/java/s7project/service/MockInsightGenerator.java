@@ -23,7 +23,7 @@ public class MockInsightGenerator {
     private AiInsightResponse buildSummary(AiRequest request) {
         String channelName = normalizeChannelName(request.channelName());
         return createInsight(
-                "Summary",
+                "[AI-SERVICE MOCK] Summary",
                 "Conversation recap",
                 "This channel is focused on " + channelName + ". The discussion is converging on a clear demo plan, "
                         + "with the team aligning on what to show, what to keep simple, and how the assistant should help viewers understand the thread quickly.",
@@ -44,7 +44,7 @@ public class MockInsightGenerator {
                 .orElse("Confirm the final demo checklist and owners.");
 
         return createInsight(
-                "Action Points",
+                "[AI-SERVICE MOCK] Action Points",
                 "Suggested follow-up",
                 "These are the clearest next steps surfaced from the discussion.",
                 List.of(
@@ -58,7 +58,7 @@ public class MockInsightGenerator {
 
     private AiInsightResponse buildDecisions(AiRequest request) {
         return createInsight(
-                "Decisions",
+                "[AI-SERVICE MOCK] Decisions",
                 "Confirmed outcomes",
                 "The discussion already reflects a few decisions that appear settled enough to present in a live demo.",
                 List.of(

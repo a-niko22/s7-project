@@ -22,7 +22,7 @@ public class MockInsightGenerator {
 
     private AiInsightResponse buildSummary(ChannelResponse channel, List<MessageResponse> messages) {
         return createInsight(
-                "Summary",
+                "[CHAT-SERVICE FALLBACK] Summary",
                 "Conversation recap",
                 "This channel is focused on " + channel.description() + ". The discussion is converging on a clear demo plan, "
                         + "with the team aligning on what to show, what to keep simple, and how the assistant should help people understand the thread quickly.",
@@ -44,7 +44,7 @@ public class MockInsightGenerator {
                 .orElse("Confirm the final demo checklist and owners.");
 
         return createInsight(
-                "Action Points",
+                "[CHAT-SERVICE FALLBACK] Action Points",
                 "Suggested follow-up",
                 "These are the clearest next steps surfaced from the discussion.",
                 List.of(
@@ -59,7 +59,7 @@ public class MockInsightGenerator {
 
     private AiInsightResponse buildDecisions(ChannelResponse channel, List<MessageResponse> messages) {
         return createInsight(
-                "Decisions",
+                "[CHAT-SERVICE FALLBACK] Decisions",
                 "Confirmed outcomes",
                 "The discussion already reflects a few decisions that appear settled enough to present in a live demo.",
                 List.of(

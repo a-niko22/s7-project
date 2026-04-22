@@ -9,6 +9,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import static org.hamcrest.Matchers.anyOf;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -56,7 +58,11 @@ class ChatServiceApplicationTests {
     void returnsAiInsight() throws Exception {
         mockMvc.perform(post("/api/channels/ai-design/ai/summary"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.title").value("Summary"))
+                .andExpect(jsonPath("$.title").value(anyOf(
+                        startsWith("[GEMINI]"),
+                        startsWith("[AI-SERVICE MOCK]"),
+                        startsWith("[CHAT-SERVICE FALLBACK]")
+                )))
                 .andExpect(jsonPath("$.bullets[0]").exists());
     }
 
