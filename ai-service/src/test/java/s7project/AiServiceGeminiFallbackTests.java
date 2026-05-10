@@ -36,7 +36,7 @@ class AiServiceGeminiFallbackTests {
                                   "messages": [
                                     {
                                       "author": "Chris",
-                                      "text": "Let's keep everything in memory so the demo stays reliable.",
+                                      "text": "Let's keep Postgres as the source of truth and use Kafka only for message events.",
                                       "time": "1:05 PM"
                                     }
                                   ]

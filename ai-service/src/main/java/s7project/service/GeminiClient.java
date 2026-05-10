@@ -9,7 +9,6 @@ import org.springframework.web.client.RestClient;
 import s7project.model.AiInsightResponse;
 import s7project.model.AiRequest;
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,18 +21,21 @@ public class GeminiClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(GeminiClient.class);
 
     private final RestClient restClient;
-    private final ObjectMapper objectMapper;
+    private final AiPromptBuilder promptBuilder;
+    private final AiInsightResponseParser responseParser;
     private final String geminiApiKey;
     private final String geminiModel;
 
     public GeminiClient(
             RestClient restClient,
-            ObjectMapper objectMapper,
-            @Value("${GEMINI_API_KEY:}") String geminiApiKey,
-            @Value("${GEMINI_MODEL:gemini-2.5-flash}") String geminiModel
+            AiPromptBuilder promptBuilder,
+            AiInsightResponseParser responseParser,
+            @Value("${gemini.api-key:}") String geminiApiKey,
+            @Value("${gemini.model:gemini-2.5-flash}") String geminiModel
     ) {
         this.restClient = restClient;
-        this.objectMapper = objectMapper;
+        this.promptBuilder = promptBuilder;
+        this.responseParser = responseParser;
         this.geminiApiKey = geminiApiKey;
         this.geminiModel = geminiModel;
     }
@@ -47,7 +49,7 @@ public class GeminiClient {
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("contents", List.of(Map.of(
-                "parts", List.of(Map.of("text", buildPrompt(type, request)))
+                "parts", List.of(Map.of("text", promptBuilder.buildPrompt(type, request)))
         )));
         payload.put("generationConfig", Map.of(
                 "responseMimeType", "application/json",
@@ -67,57 +69,11 @@ public class GeminiClient {
         String rawText = extractGeneratedText(response);
 
         try {
-            return parseInsightResponse(rawText, type);
+            return responseParser.parse(rawText, type, "Gemini");
         } catch (Exception exception) {
             LOGGER.warn("Gemini parse failure for channel {}. rawResponsePreview={}", request.channelId(), preview(rawText), exception);
             throw exception;
         }
-    }
-
-    private String buildPrompt(AiInsightType type, AiRequest request) {
-        List<s7project.model.AiMessageRequest> allMessages =
-                request.messages() == null ? List.of() : request.messages();
-        List<s7project.model.AiMessageRequest> recentMessages = takeLast(allMessages, 8);
-        List<s7project.model.AiMessageRequest> transcriptMessages = takeLast(allMessages, 40);
-
-        StringBuilder prompt = new StringBuilder();
-        prompt.append("You are helping prepare a product demo.\n");
-        prompt.append("Analyze the following chat channel and respond in JSON only.\n");
-        prompt.append("Return fields: title, subtitle, content, bullets, footer.\n");
-        prompt.append("Keep bullets concise, concrete, and suitable for a project demo UI.\n");
-        prompt.append("Treat the most recent messages as the highest-priority context.\n");
-        prompt.append("If the latest messages introduce a new topic, scope change, decision, or phase, mention it explicitly.\n");
-        prompt.append("Preserve unusual tokens, identifiers, or phrases from recent messages verbatim when they matter.\n");
-        prompt.append("Do not mention that you are an AI model.\n");
-        prompt.append("Analysis type: ").append(type.displayName()).append("\n");
-        prompt.append("Channel ID: ").append(request.channelId()).append("\n");
-        prompt.append("Channel name: ").append(request.channelName()).append("\n");
-        prompt.append("Total messages available: ").append(allMessages.size()).append("\n");
-
-        if (!allMessages.isEmpty()) {
-            s7project.model.AiMessageRequest latestMessage = allMessages.get(allMessages.size() - 1);
-            prompt.append("Latest message to consider carefully:\n");
-            appendMessage(prompt, latestMessage);
-            prompt.append("\n");
-        }
-
-        prompt.append("Most recent messages (highest priority, newest last):\n");
-        recentMessages.forEach(message -> appendMessage(prompt, message));
-
-        prompt.append("\nRecent transcript window:\n");
-        transcriptMessages.forEach(message -> appendMessage(prompt, message));
-
-        prompt.append("\n");
-        prompt.append(switch (type) {
-            case SUMMARY -> "Write a short recap with a paragraph-style content field and 2-3 supporting bullets. "
-                    + "If the newest messages add a new topic or scope change, explicitly include it in the summary.";
-            case ACTION_POINTS -> "Write a short overview and list the clearest next steps as bullets. "
-                    + "Give extra weight to asks or follow-ups in the newest messages.";
-            case DECISIONS -> "Write a short overview and list the decisions that appear settled as bullets. "
-                    + "If the newest messages revise a decision, reflect the revision.";
-        });
-
-        return prompt.toString();
     }
 
     private Map<String, Object> responseSchema() {
@@ -160,82 +116,8 @@ public class GeminiClient {
         return combined;
     }
 
-    private AiInsightResponse parseInsightResponse(String rawText, AiInsightType type) throws Exception {
-        String cleanedText = stripCodeFences(rawText).trim();
-
-        try {
-            return toInsightResponse(objectMapper.readTree(cleanedText), type);
-        } catch (Exception ignored) {
-            String extractedJson = extractJsonObject(cleanedText);
-            if (extractedJson == null) {
-                throw ignored;
-            }
-
-            return toInsightResponse(objectMapper.readTree(extractedJson), type);
-        }
-    }
-
-    private AiInsightResponse toInsightResponse(JsonNode node, AiInsightType type) {
-        String title = node.path("title").asText(type.displayName()).trim();
-        String subtitle = node.path("subtitle").asText("Generated from the latest conversation").trim();
-        String content = node.path("content").asText("").trim();
-        String footer = node.path("footer").asText("Generated by Gemini.").trim();
-
-        List<String> bullets = objectMapper.convertValue(
-                node.path("bullets"),
-                objectMapper.getTypeFactory().constructCollectionType(List.class, String.class)
-        );
-
-        return new AiInsightResponse(
-                prefixGeminiTitle(title),
-                subtitle.isBlank() ? "Generated from the latest conversation" : subtitle,
-                content,
-                bullets == null ? List.of() : bullets.stream().filter(bullet -> bullet != null && !bullet.isBlank()).toList(),
-                footer.isBlank() ? "Generated by Gemini." : footer
-        );
-    }
-
-    private String prefixGeminiTitle(String title) {
-        return title.startsWith("[GEMINI]") ? title : "[GEMINI] " + title;
-    }
-
-    private String stripCodeFences(String text) {
-        String normalized = text.trim();
-        if (normalized.startsWith("```")) {
-            normalized = normalized.replaceFirst("^```(?:json)?\\s*", "");
-            normalized = normalized.replaceFirst("\\s*```$", "");
-        }
-        return normalized;
-    }
-
-    private String extractJsonObject(String text) {
-        int start = text.indexOf('{');
-        int end = text.lastIndexOf('}');
-        if (start < 0 || end <= start) {
-            return null;
-        }
-        return text.substring(start, end + 1);
-    }
-
     private String preview(String text) {
         String normalized = text.replaceAll("\\s+", " ").trim();
         return normalized.length() > 240 ? normalized.substring(0, 240) + "..." : normalized;
-    }
-
-    private List<s7project.model.AiMessageRequest> takeLast(List<s7project.model.AiMessageRequest> messages, int count) {
-        if (messages.size() <= count) {
-            return messages;
-        }
-        return messages.subList(messages.size() - count, messages.size());
-    }
-
-    private void appendMessage(StringBuilder prompt, s7project.model.AiMessageRequest message) {
-        prompt.append("- [")
-                .append(message.time())
-                .append("] ")
-                .append(message.author())
-                .append(": ")
-                .append(message.text())
-                .append("\n");
     }
 }
