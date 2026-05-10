@@ -1,0 +1,69 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: s7-frontend
+    ports:
+      - "4173:4173"
+    depends_on:
+      - chat-service
+    restart: unless-stopped
+
+  chat-service:
+    build:
+      context: ./chat-service
+      dockerfile: Dockerfile
+    container_name: s7-chat-service
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: docker
+
+      AI_SERVICE_BASE_URL: http://ai-service:8081
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/s7_messaging
+      SPRING_DATASOURCE_USERNAME: s7_user
+      SPRING_DATASOURCE_PASSWORD: s7_password
+    depends_on:
+      - ai-service
+      - postgres
+    restart: unless-stopped
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: s7-ai-service
+    ports:
+      - "8081:8081"
+    environment:
+      SERVER_PORT: 8081
+      SPRING_PROFILES_ACTIVE: docker
+
+      AI_PROVIDER: mock
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: s7-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: s7_messaging
+      POSTGRES_USER: s7_user
+      POSTGRES_PASSWORD: s7_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U s7_user -d s7_messaging"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
