@@ -1,9 +1,12 @@
+name: s7-project
+
 services:
   frontend:
+    image: frontend:local
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: s7-frontend
+    container_name: frontend
     ports:
       - "4173:4173"
     depends_on:
@@ -11,18 +14,17 @@ services:
     restart: unless-stopped
 
   chat-service:
+    image: chat-service:local
     build:
       context: ./chat-service
       dockerfile: Dockerfile
-    container_name: s7-chat-service
+    container_name: chat-service
     ports:
       - "8080:8080"
     environment:
       SERVER_PORT: 8080
       SPRING_PROFILES_ACTIVE: docker
-
       AI_SERVICE_BASE_URL: http://ai-service:8081
-
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/s7_messaging
       SPRING_DATASOURCE_USERNAME: s7_user
       SPRING_DATASOURCE_PASSWORD: s7_password
@@ -32,16 +34,16 @@ services:
     restart: unless-stopped
 
   ai-service:
+    image: ai-service:local
     build:
       context: ./ai-service
       dockerfile: Dockerfile
-    container_name: s7-ai-service
+    container_name: ai-service
     ports:
       - "8081:8081"
     environment:
       SERVER_PORT: 8081
       SPRING_PROFILES_ACTIVE: docker
-
       AI_PROVIDER: mock
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
@@ -49,7 +51,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    container_name: s7-postgres
+    container_name: postgres
     ports:
       - "5432:5432"
     environment:
