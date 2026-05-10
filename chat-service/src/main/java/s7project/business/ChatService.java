@@ -4,6 +4,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 import s7project.model.AiMessagePayload;
@@ -12,7 +15,11 @@ import s7project.model.AiRequestPayload;
 import s7project.model.ChannelResponse;
 import s7project.model.MessageRequest;
 import s7project.model.MessageResponse;
+import s7project.persistence.ChannelEntity;
 import s7project.persistence.ChatRepository;
+import s7project.persistence.MessageEntity;
+import s7project.messaging.MessageCreatedEventFactory;
+import s7project.messaging.MessageEventPublisher;
 
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,16 +32,22 @@ public class ChatService {
     private final RestClient restClient;
     private final String aiServiceBaseUrl;
     private final MockInsightGenerator mockInsightGenerator;
+    private final MessageCreatedEventFactory messageCreatedEventFactory;
+    private final MessageEventPublisher messageEventPublisher;
 
     public ChatService(
             ChatRepository chatRepository,
             RestClient restClient,
             MockInsightGenerator mockInsightGenerator,
+            MessageCreatedEventFactory messageCreatedEventFactory,
+            MessageEventPublisher messageEventPublisher,
             @Value("${AI_SERVICE_BASE_URL:http://localhost:8082}") String aiServiceBaseUrl
     ) {
         this.chatRepository = chatRepository;
         this.restClient = restClient;
         this.mockInsightGenerator = mockInsightGenerator;
+        this.messageCreatedEventFactory = messageCreatedEventFactory;
+        this.messageEventPublisher = messageEventPublisher;
         this.aiServiceBaseUrl = aiServiceBaseUrl;
     }
 
@@ -47,15 +60,17 @@ public class ChatService {
         return chatRepository.getMessages(channelId);
     }
 
+    @Transactional
     public MessageResponse createMessage(String channelId, MessageRequest request) {
-        ensureChannelExists(channelId);
-
+        ChannelEntity channel = getChannelEntity(channelId);
         String text = request.text() == null ? "" : request.text().trim();
         if (text.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message text is required");
         }
 
-        return chatRepository.addMessage(channelId, text);
+        MessageEntity savedMessage = chatRepository.addMessage(channel, null, "You", text);
+        publishAfterCommit(savedMessage);
+        return chatRepository.toResponse(savedMessage);
     }
 
     public AiInsightResponse getSummary(String channelId) {
@@ -71,12 +86,22 @@ public class ChatService {
     }
 
     private void ensureChannelExists(String channelId) {
-        boolean exists = chatRepository.getChannels().stream()
-                .anyMatch(channel -> channel.id().equals(channelId));
+        getChannelEntity(channelId);
+    }
 
-        if (!exists) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Channel not found");
-        }
+    private ChannelEntity getChannelEntity(String channelId) {
+        return chatRepository.findChannel(channelId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Channel not found"));
+    }
+
+    private void publishAfterCommit(MessageEntity savedMessage) {
+        var event = messageCreatedEventFactory.from(savedMessage);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                messageEventPublisher.publish(event);
+            }
+        });
     }
 
     private AiInsightResponse generateInsight(String channelId, AiInsightType type) {
